@@ -1,0 +1,88 @@
+---Metrics for Flows and Campaigns
+drop table `improvado-merama.improvado.view_klaviyo_flows_campaigns`;
+create table `improvado-merama.improvado.view_klaviyo_flows_campaigns` 
+as( -- Here we can deduplicate the opens and clicks
+    select account_name, date, flow, message,campaign_name,
+      SUM(total_received) as total_received , 
+      SUM(total_clicks) AS total_clicks,
+      sum(total_opens) AS total_opens, 
+      SUM(unsubscribes) AS unsubscribes,
+      SUM(spam_complaints) AS spam_complaints,
+      SUM(bounce) AS bounces,
+      SUM(CASE WHEN total_clicks>0 THEN 1 ELSE 0 END) AS unique_clicks,
+      SUM(CASE WHEN total_opens>0 THEN 1 ELSE 0 END) AS unique_opens,
+      sum(case when total_received>0 then 1 else 0 end) as unique_received,
+    from (---Her we can obtain the total of each metric
+      SELECT account_name, flow, message, campaign_name,person_id,max(date) as date,
+        SUM(CASE event_name WHEN 'Received Email' THEN 1 ELSE 0 END) AS total_received,
+        SUM(CASE event_name WHEN 'Opened Email' THEN 1 ELSE 0 END) AS total_opens,
+        SUM(CASE event_name WHEN 'Clicked Email' THEN 1 ELSE 0 END) AS total_clicks, 
+        SUM(CASE event_name WHEN 'Unsubscribed' THEN 1 ELSE 0 END) AS unsubscribes,
+        SUM(CASE event_name WHEN 'Marked Email as Spam' THEN 1 ELSE 0 END) AS spam_complaints,
+        SUM(CASE event_name WHEN 'Bounced Email' THEN 1 ELSE 0 END) AS bounce       
+      FROM `improvado-merama.improvado.fct_mx_klv_all_events_dly` 
+      GROUP BY 1,2,3,4,5
+      ORDER BY date
+          )B
+    GROUP BY 1,2,3,4,5
+    ORDER BY 1
+);
+
+
+--- Atributtion model to obtain Placed orders and Revenue
+
+drop table `improvado-merama.improvado.view_klaviyo_attribution`;
+create table `improvado-merama.improvado.view_klaviyo_attribution` as
+(select * from ( -- Avoid overattribution and give the attribution only to one campaign
+                select *, row_number() over(partition by event_id order by hour_diff asc,interaction_date desc) as Row 
+                from (
+                      select c.account_name, c.person_id, c.flow, c.campaign_name, c.star_attr, c.end_attr, c.interaction_date, total_price, d.event_id, d.purchase_date, case when DATETIME_DIFF(d.purchase_date,c.interaction_date, MINUTE)<0 then 999999999 else DATETIME_DIFF(d.purchase_date,c.interaction_date, MINUTE) end as Hour_diff
+                      from ( --Find the date of the last interation (last click or last open) considering that should be between the attribution time window
+                                select account_name, person_id, flow, campaign_name, star_attr, end_attr, interaction_date
+                                from ( 
+                                    select a.*, b.interaction_date
+                                    from (--Attribution window per campaign= 5 days
+                                          select account_name, person_id, flow, campaign_name,  cast(substr(event_datetime,1,19) as datetime) as star_attr, 
+                                                        date_add(cast(substr(event_datetime,1,19) as datetime), INTERVAL 5 DAY) as end_attr
+                                          from  `improvado-merama.improvado.fct_mx_klv_all_events_dly` where event_name='Received Email'
+                                          )A 
+                                    left join ( --Attribution considere Opens or Clicks
+                                              select account_name, person_id, flow, campaign_name, cast(substr(event_datetime,1,19) as datetime) as interaction_date
+                                              from  `improvado-merama.improvado.fct_mx_klv_all_events_dly`
+                                              where event_name in ('Opened Email','Clicked Email')                                              
+                                              ) as b on a.person_id=b.person_id
+                                              and a.account_name=b.account_name
+                                              and a.campaign_name=b.campaign_name 
+                                              and a.flow=b.flow
+                                              and b.interaction_date between a.star_attr and a.end_attr 
+                                      )
+                                where interaction_date is not null
+                          ) C
+                      left join (
+                                select account_name, person_id, flow, campaign_name, substr(s_event_id,1,10) as event_id, cast(substr(event_datetime,1,19) as datetime) as purchase_date, sum(cast(value as FLOAT64)) as total_price
+                                from `improvado-merama.improvado.fct_mx_klv_all_events_dly`
+                                where event_name='Ordered Product'
+                                group by 1,2,3,4,5,6
+                                ) D on c.person_id=d.person_id
+                                    and c.account_name=d.account_name
+                                    and d.purchase_date between c.star_attr and c.end_attr 
+                              where D.purchase_date is not null
+                      )E
+                )F 
+      where row=1 and hour_diff<>999999999
+);
+
+----final view
+drop table `improvado-merama.improvado.view_mx_klv_total_results_dly`;
+create table `improvado-merama.improvado.view_mx_klv_total_results_dly` as
+(
+select a.*, b.revenue
+from `improvado-merama.improvado.view_klaviyo_flows_campaigns` as a
+left join (select account_name, flow, campaign_name, cast(purchase_date as date) as date, sum(total_price) as revenue
+            from `improvado-merama.improvado.view_klaviyo_attribution`
+            group by 1,2,3,4) as b 
+            on a.account_name=b.account_name
+            and a.date=b.date
+            and a.flow=b.flow
+            and a.campaign_name=b.campaign_name
+);
