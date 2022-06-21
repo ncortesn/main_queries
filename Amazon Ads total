@@ -1,0 +1,38 @@
+drop table `improvado-merama.improvado.view_mx_amz_all_ads_dly`; 
+create table `improvado-merama.improvado.view_mx_amz_all_ads_dly` 
+as( 
+    select case when account_name like '%Redlemon%' then 'Redlemon' 
+                when account_name like '%Mercadazo%' then 'Mercadazo' 
+                when account_name like '%Jinim%' then 'Jinim' 
+                when account_name like '%MUNDO%' then 'Mundo In' else 'Error' end as account_name, 
+                placement, date,attr_conv_7d as conversions, attr_sales_7d as sales, cost, clicks, impressions, 'spp' as type, 0.00 as sales_ntb, 0.00 as orders_ntb 
+                from `improvado-merama.improvado.fct_mx_amz_all_campaigns_spp_dly` 
+                union all 
+                
+    select case when account_name like '%Redlemon%' then 'Redlemon' 
+                when account_name like '%Mercadazo%' then 'Mercadazo' 
+                when account_name like '%Jinim%' then 'Jinim' 
+                when account_name like '%MUNDO%' then 'Mundo In' else 'Error' end as account_name, 
+                '' as placement,date,attr_conv_14d as conversions, attr_sales_14d as sales, cost, clicks, impressions, 'sbh' as type, attr_sales_ntb_14d as sales_ntb, attr_orders_ntb_14d as orders_ntb 
+                from `improvado-merama.improvado.fct_mx_amz_all_sbhsa_dly` 
+                union all 
+    select case when account_name like '%Redlemon%' then 'Redlemon' 
+                when account_name like '%Mercadazo%' then 'Mercadazo' 
+                when account_name like '%Jinim%' then 'Jinim' 
+                when account_name like '%MUNDO%' then 'Mundo In' else 'Error' end as account_name, 
+                '' as placement,date,attr_conv_14d as conversions, attr_sales_14d as sales, cost, clicks, impressions, 'sbv' as type, 0.00 as sales_ntb, 0.00 as orders_ntb 
+                from `improvado-merama.improvado.fct_mx_amz_all_sbv_dly` 
+                union all 
+    select case when account_name like '%Redlemon%' then 'Redlemon' 
+                when account_name like '%Mercadazo%' then 'Mercadazo' 
+                when account_name like '%Jinim%' then 'Jinim' 
+                when account_name like '%MUNDO%' then 'Mundo In' else 'Error' end as account_name, 
+                '' as placement,date,view_attr_conv_14d as conversions, view_attr_sales_14d as sales, cost, clicks, impressions, 'sd' as type, 0.00 as sales_ntb, 0.00 as orders_ntb 
+                from `improvado-merama.improvado.fct_mx_amz_all_campaigns_sd_dly` 
+                union all 
+    select case when account_name like '%Redlemon%' then 'Redlemon' 
+                when account_name like '%Mercadazo%' then 'Mercadazo' 
+                when account_name like '%Jinim%' then 'Jinim' 
+                when account_name like '%MUNDO%' then 'Mundo In' else 'Error' end as account_name, 
+                '' as placement,date,purchases as conversions, total_sales_usd as sales, total_cost as cost, click_throughs as clicks, impressions, 'dsp' as type, total_n_to_b_product_sales_usd as sales_ntb, total_n_to_b_purchases as orders_ntb 
+                from `improvado-merama.improvado.fct_mx_amz_all_dsp_dly` );
