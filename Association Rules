@@ -1,0 +1,103 @@
+  library(Matrix)
+  library(arules)
+  library(magrittr)
+  library(dplyr)
+  library(ggplot2)
+#install.packages("tidyverse")
+#install.packages("tibble")
+#install.packages("devtools")
+#install.packages("arulesViz")
+
+rm(list=ls()) 
+transacciones <- read.transactions(file = "C:/Users/corte/Documents/BasketasOrder.txt",
+                                   format = "basket",
+                                   sep = ";",
+                                   header = TRUE,
+                                   rm.duplicates = TRUE)
+transacciones
+colnames(transacciones)[1:10]
+inspect(transacciones[1:50])
+dimension<-size(transacciones)
+summary(dimension)
+
+data.frame(dimension) %>%
+  ggplot(aes(x = dimension)) +
+  geom_histogram() +
+  labs(title = "Distribución del tamaño de las transacciones",
+       x = "Tamaño") +
+  theme_bw()
+
+quantile(dimension, probs = seq(0,1,0.1))
+frecuencia_items <- itemFrequency(x = transacciones, type = "relative")
+
+itemsets <- apriori(data = transacciones,
+                    parameter = list(support = 0.0005,
+                                     confidence=0.7,
+                                     minlen=2,
+                                     target = "frequent itemset"))
+summary(itemsets)
+
+top_25itemsets <- sort(itemsets, by = "support", decreasing = TRUE)[1:25]
+inspect(top_25itemsets)
+
+as(top_25itemsets, Class = "data.frame") %>%
+  ggplot(aes(x = reorder(items, support), y = support)) +
+  geom_col() +
+  coord_flip() +
+  labs(title = "Itemsets más frecuentes", x = "itemsets") +
+  theme_bw()
+itemsets_filtrado <- arules::subset(itemsets,
+                                    subset = items %in% "Enfriador de bebidas y cervezas")
+inspect(itemsets_filtrado)
+
+#Reglas de asociación
+
+library(arulesViz)
+
+reglas <- apriori(data = transacciones,
+                  parameter = list(support = 0.0005,
+                                   confidence = 0.7,
+                                   target = "rules"))
+summary(reglas)
+
+inspect(sort(x = reglas, decreasing = TRUE, by = "confidence"))
+  
+inspect(sort(x = reglas, decreasing = FALSE, by = "lift"))
+
+reglas_df<-as(reglas, "data.frame");  
+library(writexl)
+
+
+#Filtrado de reglas de asociación
+
+reglas_filtradas <- apriori(data = transacciones,
+                             parameter = list(support = 0.0005,
+                                              confidence = 0.40,
+                                              # Se especifica que se creen reglas
+                                              target = "rules"),
+                             appearance = list(rhs = "Enfriador de bebidas y cervezas"))
+
+inspect(sort(x = reglas_filtradas, decreasing = FALSE, by = "lift"))
+inspect(sort(x = reglas_filtradas, decreasing = FALSE, by = "lift"))
+
+
+
+write_xlsx(reglas_df, "C:/Users/corte/Documents/reglas_df.xlsx")
+  )
+plot(reglas, method="grouped")
+plot(reglas, method="graph", control=list(type="items"))
+
+
+
+top_25itemsets <- sort(itemsets, by = "support", decreasing = TRUE)[1:25]
+inspect(top_25itemsets)
+
+metricas <- interestMeasure(reglas, measure = c("coverage", "fishersExactTest"),
+                            transactions = transacciones)
+metricas
+library(tibble)
+quality(reglas) <- cbind(quality(reglas), metricas)
+# inspect(sort(x = reglas, decreasing = TRUE, by = "confidence"))
+df_reglas <- as(reglas, Class = "data.frame") 
+df_reglas %>% as.tibble() %>% arrange(desc(confidence)) %>% head()
+
