@@ -1,0 +1,43 @@
+clientes=20000
+saldo_vista=runif(clientes,0,1)*10000
+saldo_ppi=(runif(clientes,0.1,0.6)*rpois(clientes,2))*60000
+saldo_fondos=(runif(clientes,0.1,0.9)*(rpois(clientes,1)-0.5>0))*30000
+edad=rpois(clientes,60)
+datos_ini<-data.frame(cbind(saldo_vista,saldo_ppi,saldo_fondos,edad))
+datos_ini$saldo_ppi=(edad<65)*datos_ini$saldo_ppi
+#Creamos la variable objetivo a partir de un potencial
+datos_ini$potencial= runif(clientes,0,1)
+datos_ini$potencial= datos_ini$potencial +
+  log(edad)/2 +
+  runif(1,0,0.03)*(saldo_vista>5000)+
+  runif(1,0,0.09)*(saldo_fondos>5000)+
+  runif(1,0,0.07)*(saldo_ppi>10000)
+summary(datos_ini)
+datos_ini$pvi=as.factor((datos_ini$potencial>=quantile(datos_ini$potencial,
+                                                       0.98))*1)
+#Eliminamos la columna que genera nuestra variable dependiente
+datos_ini = subset(datos_ini, select = -c(potencial))
+#Realizamos una tabla de frecuencias
+table(datos_ini$pvi)
+
+#Subconjunto de validacion
+validacion <- sample(1:clientes,5000)
+
+#install.packages("sampling")
+library( sampling )
+#Muestra estratificada aleatoria con reemplazamiento de tamaño 10000
+selec1 <- as.list(strata( datos_ini[-validacion,], stratanames = c("pvi"),
+                  size = c(5000,5000), method = "srswr" ))
+
+algo<-datos_ini[as.list(selec1,)]
+
+library(rpart)
+#Modelo sin sobremuestreo
+arbol.1=rpart(as.factor(pvi)~edad+saldo_ppi+saldo_fondos,
+              data=datos_ini[-validacion,],method="anova",
+              control=rpart.control(minsplit=20, cp=0.001) )
+
+#Modelo con sobremuestreo
+arbol.2=rpart(as.factor(pvi)~edad+saldo_ppi+saldo_fondos,
+              data=datos_ini[selec1[ID_unit]],method="anova",
+              control=rpart.control(minsplit=20, cp=0.001) )
